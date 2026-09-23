@@ -27,7 +27,9 @@ def compare_all_evidence_for_claim(
     for ev in evidence_items:
         try:
             if is_fact_check_evidence(ev):
-                fc_comp, ev_comp = map_fact_check_comparison(ev, claim.claim_id)
+                fc_comp, ev_comp = map_fact_check_comparison(
+                    ev, claim.claim_id, claim=claim
+                )
                 fact_checks.append(fc_comp)
                 comparisons.append(ev_comp)
             else:

@@ -29,9 +29,11 @@ _DENIAL_PATTERNS = [
     r"\bfake\s+(?:news|claim|report)\b",
     r"\buntrue\b",
     r"\bbaseless\b",
-    r"\bremains?\s+(?:in|as|the)\b",
     r"\bno\s+evidence\b",
 ]
+# NOTE: deliberately absent from the list is any "remains ..." pattern: phrasing
+# such as "remains the most valuable company" is ordinarily supportive, not a
+# denial, and must never trigger a polarity discrepancy on its own.
 
 _NUMERIC_UNIT_PATTERNS = [
     # ₹5,000 crore / 5000 crore / ₹500 cr / 500 cr
@@ -104,6 +106,24 @@ def _extract_snippet_around(text: str, target: str, window: int = 100) -> Option
     return f"{prefix}{text[start:end].strip()}{suffix}"
 
 
+def _split_sentences(text: str) -> List[str]:
+    """Split text into sentences (same rule as stance detection)."""
+    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+
+
+def _claim_subject_terms(claim: Claim) -> List[str]:
+    """Collect distinctive claim subject terms (persons, orgs, locations, entities)."""
+    terms: List[str] = []
+    for coll in (claim.persons, claim.organizations, claim.locations):
+        for term in coll or []:
+            if term and len(term) > 2 and term not in terms:
+                terms.append(term)
+    for entity in claim.entities or []:
+        if entity.text and len(entity.text) > 2 and entity.text not in terms:
+            terms.append(entity.text)
+    return terms
+
+
 def detect_discrepancies(claim: Claim, evidence: Evidence) -> List[Discrepancy]:
     """Examine evidence text against claim for numerical, temporal, and polarity discrepancies."""
     discrepancies: List[Discrepancy] = []
@@ -117,33 +137,39 @@ def detect_discrepancies(claim: Claim, evidence: Evidence) -> List[Discrepancy]:
 
     # -------------------------------------------------------------------------
     # 1. Polarity / Direct Denial Detection
+    #
+    # A denial only counts when it shares a sentence with one of the claim's
+    # subject terms. A denial pattern anywhere in the document combined with
+    # an entity mention anywhere else (e.g. an unrelated denial in a later
+    # paragraph) is not evidence about THIS assertion.
     # -------------------------------------------------------------------------
-    for pat in _DENIAL_PATTERNS:
-        m = re.search(pat, evidence_text, re.IGNORECASE)
-        if m:
-            denial_word = m.group(0)
-            # Check if evidence mentions key entities or subjects of claim
-            overlap_entities = [
-                e.text.lower() for e in claim.entities
-                if len(e.text) > 2 and e.text.lower() in evidence_text.lower()
-            ]
-            key_words = [w.lower() for w in claim.persons + claim.organizations]
-            has_subject = any(kw in evidence_text.lower() for kw in key_words) or len(overlap_entities) >= 1
+    sentences = _split_sentences(evidence_text)
+    subject_terms = [t.lower() for t in _claim_subject_terms(claim)]
 
-            if has_subject:
-                snippet = _extract_snippet_around(evidence_text, denial_word, window=80)
+    for pat in _DENIAL_PATTERNS:
+        flagged = False
+        for sentence in sentences:
+            sent_lower = sentence.lower()
+            if not subject_terms or not any(t in sent_lower for t in subject_terms):
+                continue
+            m = re.search(pat, sentence, re.IGNORECASE)
+            if m:
+                denial_word = m.group(0)
                 discrepancies.append(
                     Discrepancy(
                         discrepancy_type=DiscrepancyType.POLARITY,
                         aspect="claim_action_or_status",
                         claim_value=claim.original_text[:100],
                         evidence_value=f"Evidence contains explicit denial/refutation: '{denial_word}'",
-                        snippet=snippet,
+                        snippet=sentence[:300],
                         severity="CRITICAL",
                     )
                 )
                 # One critical denial is sufficient
+                flagged = True
                 break
+        if flagged:
+            break
 
     # -------------------------------------------------------------------------
     # 2. Numerical / Amount Discrepancies
