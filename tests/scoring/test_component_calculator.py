@@ -106,13 +106,13 @@ def test_evidence_agreement_dimension():
     comp = calc._calc_evidence_agreement(comp_result)
     assert comp.factor == ScoreFactor.EVIDENCE_AGREEMENT
     assert comp.raw_score == 1.0
-    assert comp.weighted_contribution == 30.0  # 1.0 * 0.30 * 100
+    assert comp.weighted_contribution == 25.0  # 1.0 * 0.25 * 100
 
     # 2. 1 supporting vs 1 contradicting -> 0.5 ratio
     comp_result.independent_contradicting_count = 2
     comp = calc._calc_evidence_agreement(comp_result)
     assert comp.raw_score == 0.5
-    assert comp.weighted_contribution == 15.0
+    assert comp.weighted_contribution == 12.5
 
 
 def test_source_quality_dimension():
@@ -150,7 +150,7 @@ def test_source_quality_dimension():
     assert comp.factor == ScoreFactor.SOURCE_QUALITY
     # Avg reliability: (90 + 70) / 2 = 80 -> 0.80 raw
     assert comp.raw_score == 0.80
-    assert comp.weighted_contribution == 16.0  # 0.80 * 0.20 * 100
+    assert comp.weighted_contribution == 12.0  # 0.80 * 0.15 * 100
 
 
 def test_independent_sources_dimension():
@@ -224,7 +224,7 @@ def test_official_evidence_dimension():
     comp = calc._calc_official_evidence([ev_gov], [sa_gov], comp_res)
     assert comp.factor == ScoreFactor.OFFICIAL_EVIDENCE
     assert comp.raw_score == 1.0
-    assert comp.weighted_contribution == 10.0
+    assert comp.weighted_contribution == 20.0  # 1.0 * 0.20 * 100 (official evidence weight)
 
 
 def test_transparency_dimension():

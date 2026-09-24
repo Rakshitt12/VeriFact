@@ -554,11 +554,11 @@ Applies configurable weights to evidence dimensions to produce the final 0–100
 
 | Dimension | Default Weight | Description |
 |-----------|---------------|-------------|
-| `evidence_agreement` | 30% | Ratio of supporting to total classified evidence across independent sources. |
-| `source_quality` | 20% | Weighted average reliability of supporting independent sources. |
+| `evidence_agreement` | 25% | Ratio of supporting to total classified evidence across independent sources. |
+| `source_quality` | 15% | Weighted average reliability of supporting independent sources. |
 | `independent_sources` | 20% | Number of independent (non-duplicate) supporting sources, scaled. |
 | `fact_checks` | 15% | Fact-check results: positive verdicts boost, negative verdicts penalize. |
-| `official_evidence` | 10% | Presence of primary/official source confirmation. |
+| `official_evidence` | 20% | Presence of primary/official source confirmation. |
 | `transparency` | 5% | Transparency signals of the submitted article/source. |
 
 - All weights are defined in `config/scoring_config.py` and can be changed without modifying this module.
@@ -620,11 +620,11 @@ The single source of truth for all configurable parameters.
 ```python
 # --- Scoring weights (must sum to 1.0) ---
 SCORING_WEIGHTS = {
-    "evidence_agreement": 0.30,
-    "source_quality": 0.20,
+    "evidence_agreement": 0.25,
+    "source_quality": 0.15,
     "independent_sources": 0.20,
     "fact_checks": 0.15,
-    "official_evidence": 0.10,
+    "official_evidence": 0.20,
     "transparency": 0.05,
 }
 

@@ -8,7 +8,7 @@ deterministic EvidenceStance classifications.
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 from backend.claim.models import Claim
@@ -144,10 +144,33 @@ _SNIPPET_REVIEW_PATTERNS = (
 # reviewed text AND there is topical overlap (token Jaccard or aspect
 # coverage). Shared entities alone are not sufficient: "Eiffel Tower ...
 # 1889" and "Eiffel Tower ... collapsing photo" share entities but assert
-# different facts.
+# different facts. Two further vetoes cover the remaining mismatch classes:
+# hoax-variant framing (the review debunks a staged/faked variant, e.g. a
+# "faked 2021 landing" review against a 2021-dated landing claim) and
+# different-predicate entity-only overlap with nothing anchoring the
+# assertion (e.g. "rover landed" vs "rover finding fossils").
 _ALIGNMENT_JACCARD_THRESHOLD = 0.15
 _ALIGNMENT_COVERAGE_THRESHOLD = 0.5
 _MISALIGNED_SCORE = 0.15
+# Near-verbatim overlap still aligns despite differing verb choices.
+_HIGH_OVERLAP_ESCAPE = 0.60
+
+# Fabrication framing: the reviewed proposition is a hoax VARIANT of the
+# event (staged/faked footage, doctored photos), not the submitted assertion.
+# Applying such a review's rating to the submitted claim inverts its meaning
+# (a "False" debunk of "the landing was staged" actually supports a landing
+# claim). Withheld as NEUTRAL with the original rating preserved verbatim.
+_HOAX_VARIANT_PATTERNS = (
+    re.compile(r"\bfak(?:e|ed|ing)\b", re.IGNORECASE),
+    re.compile(r"\bstag(?:ed|es|ing)\b", re.IGNORECASE),
+    re.compile(r"\bhoax(?:es)?\b", re.IGNORECASE),
+    re.compile(r"\bfabricat(?:e|ed|ion)\b", re.IGNORECASE),
+    re.compile(r"\bdoctored\b", re.IGNORECASE),
+    re.compile(r"\bmorphed\b", re.IGNORECASE),
+    re.compile(r"\bnot\s+real\b", re.IGNORECASE),
+    re.compile(r"\bnever\s+happened\b", re.IGNORECASE),
+    re.compile(r"\bdid\s+not\s+happen\b", re.IGNORECASE),
+)
 
 
 def _extract_reviewed_claim_text(evidence: Evidence) -> Optional[str]:
@@ -183,6 +206,19 @@ def _claim_key_terms(claim: Claim) -> List[str]:
 def _digit_sequence(text: str) -> str:
     """Extract bare digit sequence for lenient number comparison (Rs 10 vs 10)."""
     return re.sub(r"\D", "", text or "")
+
+
+def _action_verb_lemmas(text: str) -> Set[str]:
+    """Return lowercased VERB lemmas (the asserted predicate), if parseable."""
+    try:
+        from backend.claim.entity_extractor import get_nlp
+        nlp = get_nlp()
+        if "tagger" not in getattr(nlp, "pipe_names", []):
+            return set()
+        doc = nlp(text or "")
+        return {t.lemma_.lower() for t in doc if t.pos_ == "VERB" and len(t.lemma_) > 2}
+    except Exception:
+        return set()
 
 
 def assess_fact_check_alignment(
@@ -222,7 +258,43 @@ def assess_fact_check_alignment(
             "claim dates/numbers absent from the reviewed assertion",
         )
 
-    coverage_terms = list(dict.fromkeys(_claim_key_terms(claim) + discriminating))
+    # Hoax/fabrication-variant framing veto: a review debunking a staged,
+    # faked, or doctored variant shares entities (and sometimes years) with
+    # the submitted claim but asserts a different proposition. Its rating
+    # must never transfer — a "False" on "the landing was staged" inverts
+    # when stamped onto "the rover landed".
+    key_terms = _claim_key_terms(claim)
+    if any(p.search(reviewed_text) for p in _HOAX_VARIANT_PATTERNS) and (
+        any(t.lower() in rev_lower for t in key_terms)
+        or jaccard >= _ALIGNMENT_JACCARD_THRESHOLD
+    ):
+        return (
+            0.10,
+            False,
+            "review addresses a hoax/fabrication variant (staged/faked framing), "
+            "not the submitted assertion",
+        )
+
+    # Different-predicate veto: with no dates/numbers anchoring either side,
+    # entity-only overlap plus disjoint predicates (landed vs finding
+    # fossils) is a different assertion, not corroboration. Near-verbatim
+    # overlap still aligns (paraphrases choose different verbs).
+    if not discriminating:
+        claim_verbs = _action_verb_lemmas(claim_text)
+        reviewed_verbs = _action_verb_lemmas(reviewed_text)
+        if (
+            claim_verbs
+            and reviewed_verbs
+            and not (claim_verbs & reviewed_verbs)
+            and jaccard < _HIGH_OVERLAP_ESCAPE
+        ):
+            return (
+                0.10,
+                False,
+                "different predicate with entity-only overlap; no anchoring date/number",
+            )
+
+    coverage_terms = list(dict.fromkeys(key_terms + discriminating))
     if coverage_terms:
         hits = 0
         for term in coverage_terms:
@@ -307,6 +379,11 @@ def map_fact_check_comparison(
             extra_limitations = []
             extra_signals = [f"fact_check_claim_aligned:{detail}"]
             aspect_evidence_value = verdict_normalized
+            # State exactly what the reviewer disputed so a refutation
+            # penalty is never an unqualified "Fact Check Refutation".
+            explanation = (
+                f"{explanation} Reviewed assertion: '{reviewed_text}'."
+            )
         else:
             logger.warning(
                 "Fact-check %s NOT aligned with claim %s (%s); "

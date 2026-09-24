@@ -117,7 +117,74 @@ FACTUAL_INDICATOR_VERBS: Set[str] = {
     "open", "opens", "opened", "opening",
     "close", "closes", "closed", "closing",
     "build", "builds", "built", "building",
+    # Causal / scientific-claim verbs (cause, prevent, cure, correlate, ...)
+    "cause", "causes", "caused", "causing",
+    "prevent", "prevents", "prevented", "preventing",
+    "cure", "cures", "cured", "curing",
+    "treat", "treats", "treated", "treating",
+    "trigger", "triggers", "triggered", "triggering",
+    "link", "links", "linked", "linking",
+    "correlate", "correlates", "correlated",
+    "contribute", "contributes", "contributed",
+    "result", "results", "resulted", "resulting",
+    "lead", "leads", "led", "leading",
+    "worsen", "worsens",
+    "improve", "improves",
+    "associated",
 }
+
+
+
+# Copular stative/descriptive claims ("X is/was [verifiable property]") carry no
+# action verb, so they need their own narrow pattern. The complement lexicon is
+# deliberately restricted to objectively checkable properties (superlatives,
+# ranks, origins, locations, visibility) — a bare "is/was" match would admit
+# opinion and narrative text ("He is happy", "It was a dark day").
+COPULAR_VERIFIABLE_PROPERTIES = frozenset({
+    "tallest", "longest", "largest", "biggest", "smallest", "shortest",
+    "oldest", "newest", "first", "last", "only",
+    "visible", "located", "situated", "invented", "discovered",
+    "founded", "headquartered",
+})
+
+_COPULAR_PROPERTY_PATTERN = re.compile(
+    r"\b(?:is|are|was|were)\b[^.?!]{0,60}\b(?:"
+    + "|".join(sorted(COPULAR_VERIFIABLE_PROPERTIES))
+    + r")\b",
+    re.IGNORECASE,
+)
+
+# Dependency labels / POS tags constituting a genuine subject-verb structure.
+_SUBJECT_DEPS = frozenset({"nsubj", "nsubjpass", "csubj", "csubjpass"})
+_VERB_POS = frozenset({"VERB", "AUX"})
+
+# Verb lexicon for degraded pipelines without a parser (spacy.blank fallback).
+_FALLBACK_VERB_LEXICON = frozenset(
+    set(FACTUAL_INDICATOR_VERBS)
+    | {"is", "are", "was", "were", "be", "been", "has", "have", "had", "do", "does", "did"}
+)
+
+
+def has_subject_verb_structure(text: str) -> bool:
+    """Confirm genuine subject-verb structure via spaCy dependency parse.
+
+    A short sentence is accepted as a candidate claim only if the parse yields
+    both a subject dependency (nsubj/nsubjpass/csubj/csubjpass) and a verb
+    (VERB/AUX). In degraded environments where the pipeline has no parser
+    (spacy.blank fallback), falls back to a conservative verb-lexicon check.
+    """
+    try:
+        from backend.claim.entity_extractor import get_nlp
+        nlp = get_nlp()
+        doc = nlp(text)
+    except Exception:
+        return False
+    if "parser" in getattr(nlp, "pipe_names", []):
+        deps = {t.dep_ for t in doc}
+        poses = {t.pos_ for t in doc}
+        return bool(deps & _SUBJECT_DEPS) and bool(poses & _VERB_POS)
+    words = {w.lower() for w in re.findall(r"\b[A-Za-z]+\b", text)}
+    return len(text.split()) >= 3 and bool(words & _FALLBACK_VERB_LEXICON)
 
 
 
@@ -128,8 +195,11 @@ def is_candidate_sentence(text: str) -> bool:
     """
     clean = text.strip()
 
-    # Length bounds: too short cannot be a verifiable factual assertion
-    if len(clean) < 15 or len(clean.split()) < 4:
+    # Length bounds: fragments below 3 words cannot carry a verifiable assertion.
+    # The old 4-word bar survives only as a trigger: sub-4-word sentences must
+    # additionally prove genuine subject-verb structure (dependency parse)
+    # instead of being admitted on length alone.
+    if len(clean) < 8 or len(clean.split()) < 3:
         return False
 
     # Exclude questions
@@ -155,6 +225,12 @@ def is_candidate_sentence(text: str) -> bool:
             if len(clean.split()) < 12:
                 return False
 
+    # Short sentences below the old 4-word bar must prove subject-verb shape;
+    # this admits complete 3-word assertions ("Vaccines cause autism.") while
+    # still rejecting verbless fragments.
+    if len(clean.split()) < 4 and not has_subject_verb_structure(clean):
+        return False
+
     return True
 
 
@@ -163,8 +239,10 @@ def contains_factual_signals(text: str) -> bool:
 
     Signals include:
     - Digits or numbers (e.g. 10, 6.5%, ₹5000, 2026, 1.4 billion)
-    - Action verbs of policy, announcement, or physical event
+    - Action verbs of policy, announcement, physical event, or causation
     - Currency symbols or percentage markers ($, €, £, ₹, %)
+    - Copular stative claims with verifiable properties
+      (e.g. "X is the tallest ...", "X is visible from ...")
     """
     # Contains numerical digits
     if re.search(r"\d", text):
@@ -178,9 +256,15 @@ def contains_factual_signals(text: str) -> bool:
     if re.search(r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b", text, re.IGNORECASE):
         return True
 
-    # Contains verifiable action verbs
+    # Contains verifiable action verbs (including causal/scientific claims)
     words = {w.lower() for w in re.findall(r"\b[A-Za-z]+\b", text)}
     if words.intersection(FACTUAL_INDICATOR_VERBS) or words.intersection(ATTRIBUTION_VERBS):
+        return True
+
+    # Contains a copular stative claim with a verifiable property
+    # ("The Great Wall of China is visible from space"). Bare is/was alone
+    # is not enough — the complement must be objectively checkable.
+    if _COPULAR_PROPERTY_PATTERN.search(text):
         return True
 
     return False

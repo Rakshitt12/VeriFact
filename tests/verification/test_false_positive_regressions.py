@@ -224,3 +224,94 @@ def test_genuine_adjacent_denial_still_flagged():
     pol = [d for d in discs if d.discrepancy_type == DiscrepancyType.POLARITY]
     assert len(pol) >= 1
     assert pol[0].severity == "CRITICAL"
+
+
+# =====================================================================
+# NASA Mars-rover class: year-anchored and dateless claims vs hoax-variant
+# and different-predicate reviews sharing entities (and sometimes years).
+# =====================================================================
+
+def _nasa_claim(dates=("February 18, 2021",)) -> Claim:
+    return Claim(
+        claim_id="cl_nasa",
+        original_text="NASA's Perseverance rover landed on Mars on February 18, 2021.",
+        normalized_text="NASA's Perseverance rover landed on Mars on February 18, 2021.",
+        claim_type=ClaimType.EVENT,
+        entities=[
+            ExtractedEntity(text="NASA", label="ORG"),
+            ExtractedEntity(text="Perseverance", label="PRODUCT"),
+            ExtractedEntity(text="Mars", label="LOC"),
+        ],
+        dates=list(dates),
+        organizations=["NASA"],
+        locations=["Mars"],
+        source_sentence="NASA's Perseverance rover landed on Mars on February 18, 2021.",
+    )
+
+
+def _nasa_review(reviewed: str, evidence_id: str = "ev_fc_nasa") -> Evidence:
+    return Evidence(
+        evidence_id=evidence_id,
+        claim_id="cl_nasa",
+        title="Fact Check: Mars rover footage examined",
+        url=f"https://www.example-factcheck.org/{evidence_id}",
+        publisher="Example Fact Checker",
+        domain="example-factcheck.org",
+        snippet=f"Claim reviewed: '{reviewed}'. Rating: False",
+        source_type=SourceType.FACT_CHECK,
+        provider="google_factcheck",
+        query_used="Mars rover landing",
+        metadata={"claim_reviewed": reviewed, "verdict": "False", "rating": "False"},
+    )
+
+
+def _assert_no_refutation(claim: Claim, evidence: Evidence) -> None:
+    fc_comp, ev_comp = map_fact_check_comparison(
+        evidence, claim.claim_id, claim=claim
+    )
+    assert fc_comp.stance != EvidenceStance.CONTRADICTING
+    assert ev_comp.stance != EvidenceStance.CONTRADICTING
+    comparison = ClaimEvidenceComparisonResult(
+        claim_id=claim.claim_id, comparisons=[ev_comp], fact_checks=[fc_comp]
+    )
+    penalties = PenaltyCalculator().calculate_penalties(
+        comparison_result=comparison, source_analyses=[], evidence_items=[]
+    )
+    assert [p for p in penalties if p.penalty_type == "fact_check_refutation"] == []
+
+
+def test_nasa_year_dated_hoax_variant_withheld():
+    """Staged-landing hoax review sharing the year must not contradict."""
+    claim = _nasa_claim(dates=("2021",))
+    _assert_no_refutation(
+        claim,
+        _nasa_review(
+            "Video claims NASA faked the 2021 Mars rover landing",
+            "ev_fc_nasa_hoax",
+        ),
+    )
+
+
+def test_nasa_dateless_fossil_review_withheld():
+    """Different-predicate review (fossils) with entity-only overlap: no penalty."""
+    claim = _nasa_claim(dates=())
+    _assert_no_refutation(
+        claim,
+        _nasa_review(
+            "Photos show the Perseverance rover finding fossils on Mars",
+            "ev_fc_nasa_fossils",
+        ),
+    )
+
+
+def test_nasa_identical_review_still_contradicts():
+    """A review of the very same landing assertion keeps its refutation."""
+    claim = _nasa_claim()
+    reviewed = "NASA's Perseverance rover landed on Mars on February 18, 2021"
+    fc_comp, ev_comp = map_fact_check_comparison(
+        _nasa_review(reviewed, "ev_fc_nasa_same"), claim.claim_id, claim=claim
+    )
+    assert fc_comp.stance == EvidenceStance.CONTRADICTING
+    assert ev_comp.stance == EvidenceStance.CONTRADICTING
+    # The explanation states exactly what was reviewed.
+    assert reviewed in fc_comp.explanation

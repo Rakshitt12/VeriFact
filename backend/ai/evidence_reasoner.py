@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 from typing import List, Optional
 
-from backend.ai.fallback_reasoner import generate_fallback_reasoning
+from backend.ai.fallback_reasoner import (
+    ensure_evidence_absence_gaps,
+    generate_fallback_reasoning,
+)
 from backend.ai.grounding_validator import validate_and_sanitize_reasoning
 from backend.ai.llm_client import LLMClient, LLMError, get_llm_client
 from backend.ai.models import AIReasoningResult, EvidencePacket
@@ -49,7 +52,11 @@ class EvidenceReasoner:
         # 2. Check if LLM is enabled and configured
         if not settings.LLM_ENABLED and self.llm_client is None:
             logger.info("LLM_ENABLED is False. Executing deterministic fallback reasoning for claim %s", claim.claim_id)
-            return generate_fallback_reasoning(packet)
+            return ensure_evidence_absence_gaps(
+                generate_fallback_reasoning(packet),
+                evidence_items,
+                comparison_result,
+            )
 
         client = self.llm_client or get_llm_client()
 
@@ -80,14 +87,20 @@ class EvidenceReasoner:
             if warnings:
                 logger.info("Sanitized %d ungrounded references in AI output for claim %s", len(warnings), claim.claim_id)
 
-            return validated_result
+            return ensure_evidence_absence_gaps(
+                validated_result, evidence_items, comparison_result
+            )
 
         except LLMError as exc:
             logger.warning("LLM reasoning failed [%s: %s]. Engaging deterministic fallback reasoner.", exc.provider, exc.message)
-            return generate_fallback_reasoning(packet)
+            return ensure_evidence_absence_gaps(
+                generate_fallback_reasoning(packet), evidence_items, comparison_result
+            )
         except Exception as exc:
             logger.error("Unexpected error during AI reasoning: %s. Engaging deterministic fallback reasoner.", exc, exc_info=True)
-            return generate_fallback_reasoning(packet)
+            return ensure_evidence_absence_gaps(
+                generate_fallback_reasoning(packet), evidence_items, comparison_result
+            )
 
     def reason_sync(
         self,

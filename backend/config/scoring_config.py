@@ -4,11 +4,11 @@ from typing import Dict
 
 # Scoring weights (must sum to 1.0)
 SCORING_WEIGHTS: Dict[str, float] = {
-    "evidence_agreement": 0.30,
-    "source_quality": 0.20,
+    "evidence_agreement": 0.25,
+    "source_quality": 0.15,
     "independent_sources": 0.20,
     "fact_checks": 0.15,
-    "official_evidence": 0.10,
+    "official_evidence": 0.20,
     "transparency": 0.05,
 }
 

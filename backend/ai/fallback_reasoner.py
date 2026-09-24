@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from backend.ai.models import (
     AIReasoningResult,
@@ -11,6 +11,56 @@ from backend.ai.models import (
     FindingImportance,
     UncertaintyLevel,
 )
+from backend.retrieval.models import Evidence
+from backend.verification.models import (
+    ClaimEvidenceComparisonResult,
+    EvidenceStance,
+)
+
+ABSENCE_GAP_NO_EVIDENCE = (
+    "No relevant external evidence could be retrieved for this claim; "
+    "no independent assessment was possible."
+)
+ABSENCE_GAP_NO_SUPPORT = (
+    "No supporting evidence was retrieved for this claim in the searched "
+    "sources; no independent source corroborates the assertion."
+)
+
+
+def ensure_evidence_absence_gaps(
+    reasoning: AIReasoningResult,
+    evidence_items: Optional[List[Evidence]] = None,
+    comparison_result: Optional[ClaimEvidenceComparisonResult] = None,
+) -> AIReasoningResult:
+    """Enforce the evidence-absence invariant on verification gaps.
+
+    A report must never simultaneously show an empty evidence category and
+    "no open gaps". When a claim has zero retrieved evidence overall — or
+    zero supporting evidence — that absence is itself a verification gap,
+    regardless of what the LLM (or fallback) originally produced. Idempotent:
+    existing equivalent gaps are never duplicated.
+    """
+    gaps = list(reasoning.verification_gaps or [])
+    lowered = [g.lower() for g in gaps]
+    total = len(evidence_items or [])
+
+    supporting = 0
+    if comparison_result is not None:
+        supporting = sum(
+            1
+            for comp in comparison_result.comparisons or []
+            if comp.stance == EvidenceStance.SUPPORTING
+        )
+
+    if total == 0:
+        if not any("no relevant external evidence" in g for g in lowered):
+            gaps.append(ABSENCE_GAP_NO_EVIDENCE)
+    elif supporting == 0:
+        if not any("no supporting evidence" in g for g in lowered):
+            gaps.append(ABSENCE_GAP_NO_SUPPORT)
+
+    reasoning.verification_gaps = gaps
+    return reasoning
 
 
 def generate_fallback_reasoning(packet: EvidencePacket) -> AIReasoningResult:
