@@ -154,6 +154,19 @@ _COPULAR_PROPERTY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Causal-attribution phrases: causal constructions with no indicator verb
+# ("is due to", "rose because of", "driven by demand"). Matched alongside —
+# never instead of — the verb-set check. In the extraction pipeline
+# is_candidate_sentence() (opinion/greeting/boilerplate filters) always runs
+# first, so opinion sentences containing these phrases are still rejected
+# before this signal is ever consulted.
+_CAUSAL_ATTRIBUTION_PATTERN = re.compile(
+    r"\b(?:due\s+to|because\s+of|owing\s+to|attributed\s+to|blamed\s+on|"
+    r"driven\s+by|fueled\s+by|fuelled\s+by|spurred\s+by|sparked\s+by|"
+    r"stem(?:med|s)?\s+from|a\s+result\s+of|tied\s+to|amid)\b",
+    re.IGNORECASE,
+)
+
 # Dependency labels / POS tags constituting a genuine subject-verb structure.
 _SUBJECT_DEPS = frozenset({"nsubj", "nsubjpass", "csubj", "csubjpass"})
 _VERB_POS = frozenset({"VERB", "AUX"})
@@ -240,6 +253,7 @@ def contains_factual_signals(text: str) -> bool:
     Signals include:
     - Digits or numbers (e.g. 10, 6.5%, ₹5000, 2026, 1.4 billion)
     - Action verbs of policy, announcement, physical event, or causation
+    - Causal-attribution phrases (due to, because of, driven by, ...)
     - Currency symbols or percentage markers ($, €, £, ₹, %)
     - Copular stative claims with verifiable properties
       (e.g. "X is the tallest ...", "X is visible from ...")
@@ -265,6 +279,10 @@ def contains_factual_signals(text: str) -> bool:
     # ("The Great Wall of China is visible from space"). Bare is/was alone
     # is not enough — the complement must be objectively checkable.
     if _COPULAR_PROPERTY_PATTERN.search(text):
+        return True
+
+    # Contains a causal-attribution phrase ("due to", "because of", ...).
+    if _CAUSAL_ATTRIBUTION_PATTERN.search(text):
         return True
 
     return False
