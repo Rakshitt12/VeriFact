@@ -8,10 +8,16 @@ from fastapi.responses import JSONResponse
 from backend.api.routes import router as api_router
 from backend.config.settings import settings
 from backend.logging_config import logger
+from backend.verification.lexical_expansion import check_wordnet
 
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    # Fail-loud dependency self-check: logs an ERROR banner (never raises) if
+    # the NLTK corpora are missing, so a silently degraded deploy is visible
+    # in startup logs instead of discovered via wrong scores.
+    check_wordnet()
+
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.APP_VERSION,

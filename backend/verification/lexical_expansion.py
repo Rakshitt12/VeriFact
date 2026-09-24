@@ -38,6 +38,7 @@ own predicate, where the surface is tiny and all probed pairs behave.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Iterable, Optional, Set, Tuple
 
@@ -45,22 +46,62 @@ from backend.logging_config import logger
 
 _WORDNET_WARNED = False
 
+# Loud, greppable production message shared by the startup self-check and the
+# lazy degraded path. Deliberately ERROR-level and explicit about impact and
+# remediation: a quiet warning here once shipped a silently degraded deploy.
+_WORDNET_MISSING_MSG = (
+    "WORDNET CORPORA MISSING OR UNUSABLE. Lexical expansion is degraded to "
+    "lemma-only matching: the verb-synonym fallback contributes nothing and "
+    "deverbal-noun ACTION detection is disabled, so genuinely related "
+    "predicates (e.g. hike/surge) will NOT match. Fix the deploy by ensuring "
+    "render-build.sh runs 'python -m nltk.downloader -e -q wordnet omw-1.4' "
+    "successfully at build time."
+)
+
+
+@dataclass
+class WordNetStatus:
+    """Testable result of the WordNet availability self-check."""
+    available: bool
+    detail: str
+
+
+def _probe_wordnet() -> int:
+    """Return verb-synset count for the probe word; raises if corpus unusable."""
+    from nltk.corpus import wordnet as wn
+    return len(wn.synsets("test", pos=wn.VERB))
+
+
+def check_wordnet() -> WordNetStatus:
+    """Startup self-check for the NLTK corpora. Loud, testable, never raises.
+
+    Called once at app startup (backend/main.py); returns failure state
+    instead of raising so a missing corpus degrades the service loudly
+    rather than taking it down.
+    """
+    try:
+        count = _probe_wordnet()
+    except Exception as exc:
+        logger.error("%s (%s)", _WORDNET_MISSING_MSG, exc)
+        return WordNetStatus(False, f"wordnet probe raised: {exc}")
+    if count == 0:
+        logger.error("%s (probe returned zero synsets)", _WORDNET_MISSING_MSG)
+        return WordNetStatus(False, "wordnet probe returned zero synsets")
+    logger.info("WordNet corpora available (%d verb synsets for probe word).", count)
+    return WordNetStatus(True, f"wordnet OK ({count} probe synsets)")
+
 
 def _wordnet():
     """Lazily import the NLTK WordNet corpus, degrading gracefully when absent."""
     global _WORDNET_WARNED
     try:
+        if _probe_wordnet() == 0:
+            raise LookupError("wordnet returned no synsets for probe word")
         from nltk.corpus import wordnet as wn
-        # Touch the corpus so a missing download surfaces here as LookupError.
-        wn.synsets("test", pos=wn.VERB)
         return wn
     except (ImportError, LookupError, Exception) as exc:
         if not _WORDNET_WARNED:
-            logger.warning(
-                "WordNet corpus unavailable (%s); lexical expansion degrades "
-                "to lemma-only matching.",
-                exc,
-            )
+            logger.error("%s (%s)", _WORDNET_MISSING_MSG, exc)
             _WORDNET_WARNED = True
         return None
 
