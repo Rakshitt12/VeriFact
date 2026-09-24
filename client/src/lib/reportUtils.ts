@@ -163,6 +163,68 @@ export function classificationTone(classification: string): "supported" | "conte
   return "contested";
 }
 
+/**
+ * Visual semantics for TRUE / FALSE / mixed / insufficient.
+ * Reads the backend classification or fact-check rating text only —
+ * never inferred from the numeric score.
+ */
+export type VerdictVisualTone = "true" | "false" | "mixed" | "insufficient";
+
+export function verdictVisualTone(label: string): VerdictVisualTone {
+  const lower = label.trim().toLowerCase();
+  if (!lower) return "mixed";
+  if (isInsufficientClassification(label) || lower.includes("insufficient") || lower === "unverified" || lower === "unproven") {
+    return "insufficient";
+  }
+  if (
+    lower.includes("mixed") ||
+    lower.includes("uncertain") ||
+    lower.includes("half") ||
+    lower.includes("partly") ||
+    lower.includes("mixture") ||
+    lower.includes("needs context") ||
+    lower.includes("misleading") ||
+    lower.includes("disputed")
+  ) {
+    return "mixed";
+  }
+  if (
+    lower.includes("false") ||
+    lower.includes("contradict") ||
+    lower.includes("incorrect") ||
+    lower.includes("pants on fire") ||
+    lower.includes("fake") ||
+    lower.includes("hoax")
+  ) {
+    return "false";
+  }
+  if (
+    lower.includes("true") ||
+    lower.includes("supported") ||
+    lower.includes("correct") ||
+    lower.includes("accurate") ||
+    lower.includes("confirmed")
+  ) {
+    return "true";
+  }
+  return "mixed";
+}
+
+export function sanitizeReportFilenameId(id: string): string {
+  const cleaned = id.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return cleaned || "report";
+}
+
+export function pdfReportFilename(response: VerificationResponse): string {
+  const id = response.report?.report_id || response.request_id;
+  return `verifact-report-${sanitizeReportFilenameId(id)}.pdf`;
+}
+
+export function jsonReportFilename(response: VerificationResponse): string {
+  const id = response.report?.report_id || response.request_id;
+  return `verifact-report-${sanitizeReportFilenameId(id)}.json`;
+}
+
 /** Primary headline for a report: first claim text, else the overall summary. */
 export function reportHeadline(response: VerificationResponse): string {
   const first = response.report?.claims[0]?.claim_text ?? response.claims[0]?.claim_text;

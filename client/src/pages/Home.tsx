@@ -186,7 +186,7 @@ export default function Home() {
           <div className="hero-grid" aria-hidden="true"><span /><span /><span /><span /><span /><span /></div>
           <div className="container hero-inner">
             <div className="hero-kicker"><span className="live-dot" /> Independent evidence, clearly explained</div>
-            <div className="hero-copy"><h1>Know what<br /><em>the evidence says.</em></h1><p>Verify news claims using independent sources, fact-checks, and primary evidence — not just AI predictions.</p></div>
+            <div className="hero-copy"><h1>Know what <em>the evidence says.</em></h1><p>Verify news claims using independent sources, fact-checks, and primary evidence — not just AI predictions.</p></div>
             <VerificationInput
               onVerify={verify}
               loading={verification.loading}

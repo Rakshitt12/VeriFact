@@ -10,7 +10,10 @@ import {
   isInsufficientScore,
   reportHeadline,
   scoreDisplay,
+  pdfReportFilename,
+  sanitizeReportFilenameId,
   shortReportId,
+  verdictVisualTone,
   verificationGapCount,
 } from "@/lib/reportUtils";
 import { SAMPLE_RESPONSE } from "@/lib/sampleReport";
@@ -188,9 +191,34 @@ describe("classifications and multi-claim", () => {
   });
 });
 
+describe("verdict visual tone", () => {
+  it("maps true/false/insufficient from backend labels without using the score", () => {
+    expect(verdictVisualTone("True")).toBe("true");
+    expect(verdictVisualTone("Mostly True")).toBe("true");
+    expect(verdictVisualTone("Mostly Supported")).toBe("true");
+    expect(verdictVisualTone("False")).toBe("false");
+    expect(verdictVisualTone("Strongly Contradicted")).toBe("false");
+    expect(verdictVisualTone("INSUFFICIENT EVIDENCE")).toBe("insufficient");
+    expect(verdictVisualTone("Mixed / Uncertain")).toBe("mixed");
+    expect(verdictVisualTone("Needs Context")).toBe("mixed");
+  });
+
+  it("does not treat mixed or insufficient as false", () => {
+    expect(verdictVisualTone("Mixed / Uncertain")).not.toBe("false");
+    expect(verdictVisualTone("INSUFFICIENT EVIDENCE")).not.toBe("false");
+    expect(verdictVisualTone("INSUFFICIENT EVIDENCE")).not.toBe("true");
+  });
+});
+
 describe("report metadata", () => {
   it("shortens request ids deterministically", () => {
     expect(shortReportId("11111111-2222-3333-4444-555555555555")).toBe("VF-1111");
+  });
+
+  it("sanitizes PDF filenames from report ids", () => {
+    expect(sanitizeReportFilenameId("demo-report")).toBe("demo-report");
+    expect(sanitizeReportFilenameId("abc/def:xyz")).toBe("abc-def-xyz");
+    expect(pdfReportFilename(SAMPLE_RESPONSE)).toBe("verifact-report-demo-report.pdf");
   });
 
   it("uses the first claim as headline", () => {
