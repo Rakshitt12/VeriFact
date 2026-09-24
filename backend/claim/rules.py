@@ -275,6 +275,20 @@ def contains_factual_signals(text: str) -> bool:
     if words.intersection(FACTUAL_INDICATOR_VERBS) or words.intersection(ATTRIBUTION_VERBS):
         return True
 
+    # Lemma + synonym fallback: unlisted conjugations and related verbs
+    # ("surged", "skyrocketed") match via their verb family without expanding
+    # the static lists. Runs only after the cheap static check misses.
+    # Reference is the factual/event verb set only — attribution verbs
+    # ("said", "confirmed") are deliberately excluded here so communication
+    # framing ("smiled" via "show"/"confirm") cannot fabricate a signal.
+    # (Their surface forms above are untouched.)
+    try:
+        from backend.verification.lexical_expansion import text_has_verb_family_match
+        if text_has_verb_family_match(text, FACTUAL_INDICATOR_VERBS):
+            return True
+    except Exception:
+        pass
+
     # Contains a copular stative claim with a verifiable property
     # ("The Great Wall of China is visible from space"). Bare is/was alone
     # is not enough — the complement must be objectively checkable.

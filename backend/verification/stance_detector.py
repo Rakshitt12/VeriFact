@@ -14,6 +14,10 @@ from backend.claim.models import Claim
 from backend.logging_config import logger
 from backend.retrieval.models import Evidence
 from backend.verification.discrepancy_detector import detect_discrepancies, extract_quantities
+from backend.verification.lexical_expansion import (
+    action_matches_evidence,
+    fallback_claim_action,
+)
 from backend.verification.models import (
     AspectMatch,
     AspectType,
@@ -101,6 +105,14 @@ def _extract_claim_aspects(claim: Claim) -> List[Tuple[AspectType, str]]:
             aspects.append((AspectType.ACTION, base_action))
             break
 
+    # Generalization fallback: claims whose predicate is missing from the
+    # static table still get an ACTION aspect from the dependency parse
+    # ("RAM price hike ..." -> "hike"), so unlisted verbs stay verifiable.
+    if not any(aspect_type == AspectType.ACTION for aspect_type, _ in aspects):
+        fallback_action = fallback_claim_action(claim.normalized_text or claim.original_text)
+        if fallback_action:
+            aspects.append((AspectType.ACTION, fallback_action))
+
     return aspects
 
 
@@ -140,8 +152,13 @@ def classify_evidence_stance(
     for aspect_type, val in aspects:
         val_clean = val.lower()
         if aspect_type == AspectType.ACTION:
-            synonyms = _ACTION_AFFIRMATIONS.get(val_clean, [val_clean])
-            found = any(re.search(r"\b" + re.escape(syn) + r"\b", evidence_text.lower()) for syn in synonyms)
+            if val_clean in _ACTION_AFFIRMATIONS:
+                synonyms = _ACTION_AFFIRMATIONS[val_clean]
+                found = any(re.search(r"\b" + re.escape(syn) + r"\b", evidence_text.lower()) for syn in synonyms)
+            else:
+                # Generalization fallback for unlisted predicates: lemma +
+                # verb-family expansion instead of another static entry.
+                found = action_matches_evidence(val_clean, evidence_text)
             if has_critical_denial:
                 status = "CONTRADICTED"
                 contradicted_aspects_count += 1
