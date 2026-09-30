@@ -239,3 +239,15 @@ def test_stable_claim_ids():
     id2 = generate_claim_id(text, 1)
     assert id1 == id2
     assert id1.startswith("claim_")
+
+
+def test_extract_disaster_and_event_claims():
+    """Test extracting natural disaster and event claims (e.g. floods, earthquakes)."""
+    text = "Recently There was a flood in Bihar."
+    claims = extract_claims_from_text(text)
+    assert len(claims) == 1
+    c = claims[0]
+    assert "flood in Bihar" in c.original_text
+    assert c.claim_type == ClaimType.EVENT
+    assert "Bihar" in c.locations or "Bihar" in c.entities
+
