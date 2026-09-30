@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowUpRight,
   BookOpen,
   Check,
   ChevronRight,
   CircleHelp,
-  FileSearch,
   Fingerprint,
   Globe2,
   Link2,
@@ -19,6 +19,22 @@ import {
   X,
 } from "lucide-react";
 import { useVerification } from "@/hooks/useVerification";
+import { TiltCard } from "@/components/motion/TiltCard";
+import {
+  buttonMotion,
+  cardRevealVariants,
+  chipMotion,
+  EASE_OUT,
+  heroCardVariants,
+  heroContainerVariants,
+  heroFootnoteVariants,
+  heroHeadingVariants,
+  heroKickerVariants,
+  heroSubVariants,
+  sectionRevealVariants,
+  SPRING,
+  staggerContainerVariants,
+} from "@/lib/motion";
 
 const examples = [
   "Scientists discovered a new planet that could support life.",
@@ -57,7 +73,15 @@ function Header({ onStart }: { onStart: () => void }) {
         </nav>
         <div className="nav-actions">
           <button className="text-button hide-mobile" onClick={() => toast.info("Your verification history will appear here once you run a check.")}>History</button>
-          <button className="button button-dark button-small" onClick={onStart}>Start verification <ArrowUpRight size={15} /></button>
+          <motion.button
+            whileHover={buttonMotion.whileHover}
+            whileTap={buttonMotion.whileTap}
+            transition={buttonMotion.transition}
+            className="button button-dark button-small"
+            onClick={onStart}
+          >
+            Start verification <ArrowUpRight size={15} />
+          </motion.button>
           <button className="menu-toggle" onClick={() => setMenuOpen((open) => !open)} aria-label="Toggle navigation">
             {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -98,95 +122,280 @@ function VerificationInput({ onVerify, loading, stage, stageIndex, stageCount }:
   };
 
   return (
-    <div className="verify-card" id="verify">
-      <div className="verify-card-topline"><span className="eyebrow">Start an investigation</span><span className="secure-pill"><ShieldCheck size={13} /> Evidence-first</span></div>
+    <TiltCard
+      variants={heroCardVariants}
+      maxTilt={2.5}
+      className="verify-card"
+      id="verify"
+    >
+      <div className="verify-card-topline">
+        <span className="eyebrow">Start an investigation</span>
+        <span className="secure-pill"><ShieldCheck size={13} /> Evidence-first</span>
+      </div>
       <div className="input-tabs" role="tablist" aria-label="Verification input type">
         {([
-          ["claim", "Claim", <TextCursorInput size={16} />],
-          ["url", "Article URL", <Link2 size={16} />],
-          ["text", "Article text", <BookOpen size={16} />],
-        ] as const).map(([tab, label, icon]) => (
-          <button key={tab} role="tab" aria-selected={mode === tab} className={`input-tab ${mode === tab ? "active" : ""}`} onClick={() => setMode(tab)}>
-            {icon}{label}
-          </button>
-        ))}
+          ["claim", "Claim", <TextCursorInput size={16} key="claim-icon" />],
+          ["url", "Article URL", <Link2 size={16} key="url-icon" />],
+          ["text", "Article text", <BookOpen size={16} key="text-icon" />],
+        ] as const).map(([tab, label, icon]) => {
+          const isActive = mode === tab;
+          return (
+            <button
+              key={tab}
+              role="tab"
+              aria-selected={isActive}
+              className={`input-tab ${isActive ? "active" : ""}`}
+              onClick={() => setMode(tab)}
+            >
+              {icon}
+              <span>{label}</span>
+              {isActive && (
+                <motion.span
+                  layoutId="activeTabUnderline"
+                  className="input-tab-indicator"
+                  transition={SPRING.tabIndicator}
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
       <div className={`input-wrap ${mode === "text" ? "textarea-wrap" : ""}`}>
         {mode === "url" ? <Globe2 size={19} /> : mode === "text" ? <BookOpen size={19} /> : <Search size={19} />}
         {mode === "text" ? (
-          <textarea id="verification-input" value={value} onChange={(event) => setValue(event.target.value)} placeholder={placeholder} rows={4} />
+          <textarea
+            id="verification-input"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder={placeholder}
+            rows={4}
+          />
         ) : (
-          <input id="verification-input" value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => event.key === "Enter" && submit()} placeholder={placeholder} />
+          <input
+            id="verification-input"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && submit()}
+            placeholder={placeholder}
+          />
         )}
-        {value && <button className="clear-input" onClick={() => setValue("")} aria-label="Clear input"><X size={16} /></button>}
+        {value && (
+          <button className="clear-input" onClick={() => setValue("")} aria-label="Clear input">
+            <X size={16} />
+          </button>
+        )}
       </div>
       <div className="verify-actions">
-        {loading ? (
-          <p className="input-note" role="status" aria-live="polite"><Search size={14} /> {stage}… <span>stage {stageIndex + 1} of {stageCount}</span></p>
-        ) : (
-          <p className="input-note"><CircleHelp size={14} /> We compare retrieved evidence — not just model memory.</p>
-        )}
-        <button className="button button-primary" onClick={submit} disabled={loading} aria-busy={loading}>{loading ? "Verifying…" : <>Verify {mode === "claim" ? "claim" : "source"}<ChevronRight size={16} /></>}</button>
+        <div className="input-note-wrap">
+          <AnimatePresence mode="wait">
+            {loading ? (
+              <motion.p
+                key="loading-note"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2, ease: EASE_OUT }}
+                className="input-note"
+                role="status"
+                aria-live="polite"
+              >
+                <Search size={14} className="spinning-icon" /> {stage}… <span>stage {stageIndex + 1} of {stageCount}</span>
+              </motion.p>
+            ) : (
+              <motion.p
+                key="idle-note"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2, ease: EASE_OUT }}
+                className="input-note"
+              >
+                <CircleHelp size={14} /> We compare retrieved evidence — not just model memory.
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
+        <motion.button
+          whileHover={loading ? {} : buttonMotion.whileHover}
+          whileTap={loading ? {} : buttonMotion.whileTap}
+          transition={buttonMotion.transition}
+          className="button button-primary"
+          onClick={submit}
+          disabled={loading}
+          aria-busy={loading}
+        >
+          <AnimatePresence mode="wait">
+            {loading ? (
+              <motion.span
+                key="verifying-text"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15, ease: EASE_OUT }}
+                className="btn-content-wrap"
+              >
+                Verifying…
+              </motion.span>
+            ) : (
+              <motion.span
+                key="idle-text"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15, ease: EASE_OUT }}
+                className="btn-content-wrap"
+              >
+                Verify {mode === "claim" ? "claim" : "source"}
+                <ChevronRight size={16} className="btn-arrow" />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.button>
       </div>
       <div className="examples-row">
         <span>Try an example</span>
-        {examples.map((example, index) => <button key={example} onClick={() => useExample(example)} className="example-chip">{index + 1}. “{example.slice(0, 37)}…”</button>)}
+        {examples.map((example, index) => (
+          <motion.button
+            key={example}
+            whileHover={chipMotion.whileHover}
+            whileTap={chipMotion.whileTap}
+            transition={chipMotion.transition}
+            onClick={() => useExample(example)}
+            className="example-chip"
+          >
+            {index + 1}. “{example.slice(0, 37)}…”
+          </motion.button>
+        ))}
       </div>
-    </div>
+    </TiltCard>
   );
 }
 
 function ProcessSection() {
   const steps = [
-    ["01", "Input", "Submit an article, a URL, or one specific claim.", <TextCursorInput />],
-    ["02", "Search", "Find relevant reporting, fact-checks, and primary sources.", <Search />],
-    ["03", "Compare", "Separate independent evidence from syndicated repetition.", <Fingerprint />],
-    ["04", "Verify", "Get an explainable report with a deterministic score.", <ShieldCheck />],
+    ["01", "Input", "Submit an article, a URL, or one specific claim.", <TextCursorInput key="step-1" />],
+    ["02", "Search", "Find relevant reporting, fact-checks, and primary sources.", <Search key="step-2" />],
+    ["03", "Compare", "Separate independent evidence from syndicated repetition.", <Fingerprint key="step-3" />],
+    ["04", "Verify", "Get an explainable report with a deterministic score.", <ShieldCheck key="step-4" />],
   ];
   return (
-    <section className="process-section" id="process">
+    <motion.section
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: "-60px" }}
+      variants={staggerContainerVariants}
+      className="process-section"
+      id="process"
+    >
       <div className="container">
-        <div className="section-heading split-heading"><div><span className="eyebrow">The investigation loop</span><h2>From headline<br /><em>to evidence.</em></h2></div><p>VeriFact turns a fast-moving story into a structured trail of evidence you can inspect, challenge, and share.</p></div>
+        <motion.div variants={sectionRevealVariants} className="section-heading split-heading">
+          <div>
+            <span className="eyebrow">The investigation loop</span>
+            <h2>From headline<br /><em>to evidence.</em></h2>
+          </div>
+          <p>VeriFact turns a fast-moving story into a structured trail of evidence you can inspect, challenge, and share.</p>
+        </motion.div>
         <div className="process-grid">
-          {steps.map(([number, title, description, icon], index) => <div className="process-step" key={`process-step-${index}`}>
-            <div className="process-step-top"><span className="step-number">{number}</span><span className="step-icon">{icon}</span></div>
-            <h3>{title}</h3><p>{description}</p>{index < 3 && <span className="step-line" aria-hidden="true" />}
-          </div>)}
+          {steps.map(([number, title, description, icon], index) => (
+            <motion.div
+              variants={cardRevealVariants}
+              whileHover={{ y: -5, transition: { duration: 0.22, ease: EASE_OUT } }}
+              className="process-step"
+              key={`process-step-${index}`}
+            >
+              <div className="process-step-top">
+                <span className="step-number">{number}</span>
+                <span className="step-icon">{icon}</span>
+              </div>
+              <h3>{title}</h3>
+              <p>{description}</p>
+              {index < 3 && <span className="step-line" aria-hidden="true" />}
+            </motion.div>
+          ))}
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }
 
 function PrinciplesSection() {
   return (
-    <section className="principles-section" id="principles">
+    <motion.section
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: "-60px" }}
+      variants={staggerContainerVariants}
+      className="principles-section"
+      id="principles"
+    >
       <div className="container principles-inner">
-        <div className="principles-copy"><span className="eyebrow eyebrow-light">What we believe</span><h2>Good verification<br />shows its work.</h2><p>There is no single “truth detector.” There is only a clear account of what was checked, which sources agree, what conflicts, and what is still unknown.</p><button className="button button-ghost-light" onClick={() => toast.info("Methodology details are coming soon.")}>Read our methodology <ArrowUpRight size={15} /></button></div>
-        <div className="principles-list"><div className="principle-item"><span>01</span><div><h3>Independent sources</h3><p>Syndicated copies are clustered so repetition does not masquerade as corroboration.</p></div></div><div className="principle-item"><span>02</span><div><h3>Primary evidence</h3><p>Official documents and direct records are weighted when they are available.</p></div></div><div className="principle-item"><span>03</span><div><h3>Visible uncertainty</h3><p>Mixed, contradicted, and insufficient evidence remain distinct outcomes.</p></div></div></div>
+        <motion.div variants={sectionRevealVariants} className="principles-copy">
+          <span className="eyebrow eyebrow-light">What we believe</span>
+          <h2>Good verification<br />shows its work.</h2>
+          <p>There is no single “truth detector.” There is only a clear account of what was checked, which sources agree, what conflicts, and what is still unknown.</p>
+          <motion.button
+            whileHover={buttonMotion.whileHover}
+            whileTap={buttonMotion.whileTap}
+            transition={buttonMotion.transition}
+            className="button button-ghost-light"
+            onClick={() => toast.info("Methodology details are coming soon.")}
+          >
+            Read our methodology <ArrowUpRight size={15} />
+          </motion.button>
+        </motion.div>
+        <div className="principles-list">
+          {[
+            { num: "01", title: "Independent sources", text: "Syndicated copies are clustered so repetition does not masquerade as corroboration." },
+            { num: "02", title: "Primary evidence", text: "Official documents and direct records are weighted when they are available." },
+            { num: "03", title: "Visible uncertainty", text: "Mixed, contradicted, and insufficient evidence remain distinct outcomes." },
+          ].map((item, i) => (
+            <motion.div variants={cardRevealVariants} className="principle-item" key={`principle-${i}`}>
+              <span>{item.num}</span>
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
       </div>
-    </section>
+    </motion.section>
   );
 }
 
 export default function Home() {
   const verification = useVerification();
   const scrollToVerify = () => document.getElementById("verify")?.scrollIntoView({ behavior: "smooth", block: "center" });
+
   useEffect(() => {
     if (verification.error) toast.error(verification.error);
   }, [verification.error]);
+
   const verify = (value: string, mode: InputMode) => {
     void verification.verify(value, mode);
   };
+
   return (
     <div className="app-shell">
       <Header onStart={scrollToVerify} />
       <main>
-        <section className="hero-section">
-          <div className="hero-grid" aria-hidden="true"><span /><span /><span /><span /><span /><span /></div>
+        <motion.section
+          variants={heroContainerVariants}
+          initial="hidden"
+          animate="visible"
+          className="hero-section"
+        >
+          <div className="hero-grid" aria-hidden="true">
+            <span /><span /><span /><span /><span /><span />
+          </div>
           <div className="container hero-inner">
-            <div className="hero-kicker"><span className="live-dot" /> Independent evidence, clearly explained</div>
-            <div className="hero-copy"><h1>Know what <em>the evidence says.</em></h1><p>Verify news claims using independent sources, fact-checks, and primary evidence — not just AI predictions.</p></div>
+            <motion.div variants={heroKickerVariants} className="hero-kicker">
+              <span className="live-dot" /> Independent evidence, clearly explained
+            </motion.div>
+            <motion.div variants={heroHeadingVariants} className="hero-copy">
+              <h1>Know what <em>the evidence says.</em></h1>
+              <p>Verify news claims using independent sources, fact-checks, and primary evidence — not just AI predictions.</p>
+            </motion.div>
             <VerificationInput
               onVerify={verify}
               loading={verification.loading}
@@ -194,14 +403,38 @@ export default function Home() {
               stageIndex={verification.stageIndex}
               stageCount={verification.stageCount}
             />
-            <div className="hero-footnote"><span><Check size={14} /> Designed for careful readers</span><span><Check size={14} /> No black-box verdicts</span><span><Check size={14} /> Sources you can open</span></div>
+            <motion.div variants={heroFootnoteVariants} className="hero-footnote">
+              <span><Check size={14} /> Designed for careful readers</span>
+              <span><Check size={14} /> No black-box verdicts</span>
+              <span><Check size={14} /> Sources you can open</span>
+            </motion.div>
           </div>
-        </section>
-        <section className="signal-section"><div className="container signal-inner"><div className="signal-label"><Sparkles size={16} /> A better signal</div><p>“Credibility” is not a feeling. It is a score built from source quality, evidence agreement, independent reporting, and transparent gaps.</p><Link href="/analyze/demo" className="inline-link">See a sample report <ArrowUpRight size={15} /></Link></div></section>
+        </motion.section>
+        <motion.section
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-40px" }}
+          variants={sectionRevealVariants}
+          className="signal-section"
+        >
+          <div className="container signal-inner">
+            <div className="signal-label"><Sparkles size={16} /> A better signal</div>
+            <p>“Credibility” is not a feeling. It is a score built from source quality, evidence agreement, independent reporting, and transparent gaps.</p>
+            <Link href="/analyze/demo" className="inline-link">
+              See a sample report <ArrowUpRight size={15} />
+            </Link>
+          </div>
+        </motion.section>
         <ProcessSection />
         <PrinciplesSection />
       </main>
-      <footer className="site-footer"><div className="container footer-inner"><BrandMark /><span>Evidence before certainty.</span><span>© 2026 VeriFact</span></div></footer>
+      <footer className="site-footer">
+        <div className="container footer-inner">
+          <BrandMark />
+          <span>Evidence before certainty.</span>
+          <span>© 2026 VeriFact</span>
+        </div>
+      </footer>
     </div>
   );
 }
