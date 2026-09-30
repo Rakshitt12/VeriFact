@@ -172,6 +172,14 @@ _HOAX_VARIANT_PATTERNS = (
     re.compile(r"\bdid\s+not\s+happen\b", re.IGNORECASE),
 )
 
+# Media/Visual debunk patterns: a review debunking viral/unrelated photos, videos, or images
+# addresses the media misattribution, not the factual occurrence of the underlying event.
+_MEDIA_DEBUNK_PATTERNS = (
+    re.compile(r"\b(?:recent|old|unrelated|viral|recycled|falsely\s+shared|misattributed|out\s+of\s+context)\s+(?:photo|photos|image|images|video|videos|picture|pictures|footage|clip|clips|visual|visuals)\b", re.IGNORECASE),
+    re.compile(r"\b(?:photo|photos|image|images|video|videos|picture|pictures|footage|clip|clips|visual|visuals)\s+(?:show|shows|showing|shared\s+as|claimed\s+to\s+show|from|of|in)\b", re.IGNORECASE),
+    re.compile(r"\b(?:falsely\s+shared|misleading\s+video|misleading\s+photo|misleading\s+image|fake\s+photo|fake\s+image|fake\s+video)\b", re.IGNORECASE),
+)
+
 
 def _extract_reviewed_claim_text(evidence: Evidence) -> Optional[str]:
     """Return the exact assertion the fact-checker reviewed, if recoverable."""
@@ -275,6 +283,18 @@ def assess_fact_check_alignment(
             "not the submitted assertion",
         )
 
+    # Media-debunk veto: a review debunking an old/unrelated photo/video shared during an event
+    # addresses the media artifact, not the reality of the underlying event.
+    claim_has_media_framing = bool(
+        re.search(r"\b(?:photo|photos|image|images|video|videos|picture|pictures|footage|clip|clips|visual|visuals)\b", claim_text, re.IGNORECASE)
+    )
+    if not claim_has_media_framing and any(p.search(reviewed_text) for p in _MEDIA_DEBUNK_PATTERNS):
+        return (
+            0.10,
+            False,
+            "review addresses a viral photo/video misattribution, not the submitted assertion",
+        )
+
     # Different-predicate veto: with no dates/numbers anchoring either side,
     # entity-only overlap plus disjoint predicates (landed vs finding
     # fossils) is a different assertion, not corroboration. Near-verbatim
@@ -307,7 +327,12 @@ def assess_fact_check_alignment(
         coverage = 1.0
 
     score = round(0.5 * jaccard + 0.5 * coverage, 2)
-    aligned = jaccard >= _ALIGNMENT_JACCARD_THRESHOLD or coverage >= _ALIGNMENT_COVERAGE_THRESHOLD
+    # Require either solid token overlap or high aspect coverage with non-trivial token overlap
+    aligned = (
+        jaccard >= _HIGH_OVERLAP_ESCAPE
+        or (jaccard >= _ALIGNMENT_JACCARD_THRESHOLD and coverage >= _ALIGNMENT_COVERAGE_THRESHOLD)
+        or (coverage >= 0.8 and jaccard >= 0.10 and len(coverage_terms) >= 2)
+    )
     detail = (
         f"token overlap {jaccard:.2f}, key-aspect coverage {coverage:.2f}"
     )

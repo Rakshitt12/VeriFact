@@ -46,6 +46,11 @@ _ACTION_AFFIRMATIONS = {
     "launch": ["launched", "rolled out", "introduced", "started", "unveiled"],
     "hire": ["hired", "recruited", "onboarded", "appointed", "hiring"],
     "layoff": ["laid off", "layoffs", "sacked", "fired", "terminated", "job cuts"],
+    "flood": ["flood", "floods", "flooded", "flooding", "inundated", "inundation", "submerged", "deluged", "deluge", "swelled"],
+    "earthquake": ["earthquake", "earthquakes", "tremor", "tremors", "quake", "quakes", "seismic"],
+    "disaster": ["disaster", "calamity", "catastrophe", "crisis"],
+    "strike": ["struck", "strikes", "striking", "hit", "hits", "hitting", "ravaged", "swept", "affected", "affecting", "devastated"],
+    "occur": ["occurred", "happened", "occur", "occurs", "erupted", "broke out"],
 }
 
 

@@ -111,3 +111,38 @@ def test_map_fact_check_comparison_full():
     assert ev_comp.stance == EvidenceStance.CONTRADICTING
     assert ev_comp.confidence >= 0.90
     assert "Boom Live" in ev_comp.reasoning
+
+
+def test_map_fact_check_media_debunk_not_contradicting_event_claim():
+    """Verify that fact-checks debunking viral photos/images do not contradict an event claim."""
+    from backend.claim.models import Claim, ClaimImportance, ClaimType
+    event_claim = Claim(
+        claim_id="claim_flood_bihar",
+        original_text="Recently There was a flood in Bihar",
+        normalized_text="Recently There was a flood in Bihar",
+        claim_type=ClaimType.EVENT,
+        importance=ClaimImportance.HIGH,
+        locations=["Bihar"],
+        source_sentence="Recently There was a flood in Bihar",
+    )
+    ev_photo_debunk = Evidence(
+        evidence_id="ev_fc_altnews",
+        claim_id="claim_flood_bihar",
+        title="Alt News: Old and unrelated images shared as recent floods in Bihar",
+        url="https://www.altnews.in/photo-check",
+        publisher="Alt News",
+        domain="altnews.in",
+        snippet="Claim reviewed: 'Image of family taking refuge on roof of their hut during Bihar floods'. Rating: False",
+        source_type=SourceType.FACT_CHECK,
+        provider="factcheck_api",
+        query_used="Bihar flood fact check",
+        metadata={
+            "claim_reviewed": "Image of family taking refuge on roof of their hut during Bihar floods",
+            "rating": "False",
+        },
+    )
+    fc_comp, ev_comp = map_fact_check_comparison(ev_photo_debunk, event_claim.claim_id, event_claim)
+    assert fc_comp.stance == EvidenceStance.NEUTRAL
+    assert ev_comp.stance == EvidenceStance.NEUTRAL
+    assert "different assertion" in fc_comp.explanation or "not counted" in fc_comp.explanation
+
