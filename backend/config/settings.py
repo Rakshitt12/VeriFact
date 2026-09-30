@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.1
     LLM_ENABLED: bool = False
 
+    # AI Claim Extraction (input interpretation) Settings.
+    # Distinct from AI_CROSS_VERIFY_ENABLED (scoring cross-verification).
+    # True -> AI extraction first, deterministic fallback if AI fails.
+    # False -> existing deterministic extraction only.
+    AI_CLAIM_EXTRACTION_ENABLED: bool = True
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse comma-separated CORS origins into a list."""

@@ -56,8 +56,10 @@ def test_extract_multi_claim_single_sentence():
     assert "take effect in January" in split[1]
 
 
-def test_extract_article_with_headline_and_body():
+def test_extract_article_with_headline_and_body(monkeypatch):
     """Test headline claim extraction combined with article body claims."""
+    from backend.config.settings import settings as app_settings
+    monkeypatch.setattr(app_settings, "AI_CLAIM_EXTRACTION_ENABLED", False)
     article = NormalizedArticle(
         source_type="url",
         original_input="https://example.com/news",
@@ -78,6 +80,44 @@ def test_extract_article_with_headline_and_body():
     headline_claim = next((c for c in claims if c.is_headline_claim), None)
     assert headline_claim is not None
     assert "Semiconductor" in headline_claim.original_text
+    assert headline_claim.importance == ClaimImportance.HIGH
+
+
+def test_extract_claims_ai_first_headline_flag(monkeypatch):
+    """AI-first path flags the title-restating claim (hermetic: scripted LLM)."""
+    from backend.ai.llm_client import LLMClient
+
+    class _FixedClient(LLMClient):
+        @property
+        def provider_name(self) -> str:
+            return "scripted-test"
+
+        async def generate_structured(self, system_instruction, user_prompt, response_model):
+            return response_model.model_validate({
+                "claims": [
+                    {"claim_text": "India approved a new semiconductor manufacturing plant.", "confidence": 0.95},
+                    {"claim_text": "The Union Cabinet approved a 10 billion dollar incentive program.", "confidence": 0.9},
+                ],
+                "status": "claims_found",
+            })
+
+    monkeypatch.setattr(
+        "backend.claim.ai_claim_extractor.get_llm_client", lambda *a, **k: _FixedClient()
+    )
+    article = NormalizedArticle(
+        source_type="url",
+        original_input="https://example.com/news",
+        url="https://example.com/news",
+        title="India Approves New Semiconductor Manufacturing Plant",
+        body="The Union Cabinet approved a 10 billion dollar incentive program for chipmakers.",
+        extraction_method="direct_text",
+    )
+    claims = extract_claims(article)
+    assert len(claims) == 2
+    headline_claim = next((c for c in claims if c.is_headline_claim), None)
+    assert headline_claim is not None
+    # AI normalization may change casing; correspondence is what matters.
+    assert "semiconductor" in headline_claim.original_text.lower()
     assert headline_claim.importance == ClaimImportance.HIGH
 
 

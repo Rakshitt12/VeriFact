@@ -291,7 +291,19 @@ def extract_claims_from_text(
 
 
 def extract_claims(article: NormalizedArticle) -> List[Claim]:
-    """Clean service interface: transform a NormalizedArticle into a list of factual Claims."""
+    """Clean service interface: transform a NormalizedArticle into a list of factual Claims.
+
+    AI-first when AI_CLAIM_EXTRACTION_ENABLED: the AI extractor interprets
+    natural/imperfect input; any AI failure or empty result falls back to the
+    existing deterministic extractor, which is always preserved.
+    """
+    try:
+        from backend.claim.ai_claim_extractor import extract_claims_ai_first
+        ai_claims = extract_claims_ai_first(article)
+        if ai_claims:
+            return ai_claims
+    except Exception as exc:
+        logger.warning("AI claim extraction path failed (%s); using deterministic extractor.", exc)
     return extract_claims_from_text(
         text=article.body,
         headline=article.title,
