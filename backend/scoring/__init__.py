@@ -1,5 +1,6 @@
 """Credibility Scoring Engine package."""
 
+from backend.scoring.ai_cross_verifier import AICrossVerifier
 from backend.scoring.component_calculator import ComponentCalculator
 from backend.scoring.credibility_score import (
     CredibilityScoreCalculator,
@@ -17,6 +18,7 @@ from backend.scoring.score_explanation import ScoreExplainer
 from backend.scoring.service import CredibilityScoringService
 
 __all__ = [
+    "AICrossVerifier",
     "ComponentCalculator",
     "PenaltyCalculator",
     "ScoreExplainer",

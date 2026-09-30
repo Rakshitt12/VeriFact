@@ -369,13 +369,16 @@ async def analyze_claim_or_article(request: VerificationRequest) -> Verification
                 )
 
             # Execute Part 9 Credibility Scoring Engine
-            claim_cred_score = scoring_service.score_claim(
+            # score_claim is async: passes ai_reasoning so AICrossVerifier can
+            # apply PATH A cross-check or PATH B rescue without a second LLM call.
+            claim_cred_score = await scoring_service.score_claim(
                 claim_id=c.claim_id,
                 claim_text=c.original_text,
                 evidence_items=ev_items,
                 source_analyses=source_analyses,
                 independence_result=independence_result,
                 comparison_result=comparison_result,
+                ai_reasoning=ai_reasoning,
             )
             claim_cred_scores.append(claim_cred_score)
 
@@ -394,6 +397,7 @@ async def analyze_claim_or_article(request: VerificationRequest) -> Verification
                     score=claim_cred_score.score,
                     classification=claim_cred_score.classification,
                     summary=claim_summary or claim_cred_score.summary,
+                    scoring_method=claim_cred_score.scoring_method,
                     supporting_evidence=supporting_items,
                     contradicting_evidence=contradicting_items,
                     neutral_evidence=neutral_items,

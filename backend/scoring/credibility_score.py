@@ -134,6 +134,7 @@ class CredibilityScoreCalculator:
             summary=summary,
             limitations=limitations,
             methodology_version=SCORING_METHODOLOGY_VERSION,
+            scoring_method="deterministic",
         )
 
     def _check_insufficient_evidence(

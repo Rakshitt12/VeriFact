@@ -130,3 +130,16 @@ PENALTY_REPUTABLE_CONTRADICTION: float = 25.0
 PENALTY_ANONYMOUS_UNINDEXED: float = 10.0
 SCORING_METHODOLOGY_VERSION: str = "v1.0"
 
+# Part 10.5: AI Cross-Verification & Rescue
+# AI_CROSS_VERIFY_ENABLED — attempt Gemini cross-check whenever possible.
+# This is best-effort: any Gemini failure silently falls back to the
+# deterministic result without altering or blocking it.
+AI_CROSS_VERIFY_ENABLED: bool = True
+# Maximum points Gemini can shift an existing deterministic score in PATH A.
+AI_CROSS_VERIFY_MAX_ADJUSTMENT: float = 15.0
+# Agreement ratio difference (0.0–1.0) needed to trigger PATH A adjustment.
+# 0.30 = Gemini's supporting/total ratio must differ from deterministic by ≥30%.
+AI_CROSS_VERIFY_MATERIAL_RATIO_THRESHOLD: float = 0.30
+# Minimum total grounded AI findings (supporting + contradicting) needed to
+# rescue an INSUFFICIENT EVIDENCE result in PATH B.
+AI_RESCUE_MIN_GROUNDED_FINDINGS: int = 2

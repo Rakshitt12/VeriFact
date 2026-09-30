@@ -166,6 +166,7 @@ class ClaimResult(BaseModel):
     score: Optional[int] = None
     classification: str
     summary: str
+    scoring_method: str = "deterministic"  # deterministic | ai_assisted | insufficient_evidence
     supporting_evidence: List[EvidenceItem] = Field(default_factory=list)
     contradicting_evidence: List[EvidenceItem] = Field(default_factory=list)
     neutral_evidence: List[EvidenceItem] = Field(default_factory=list)

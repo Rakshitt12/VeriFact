@@ -54,6 +54,7 @@ class ClaimCredibilityScore(BaseModel):
     summary:                  str                     = Field("", description="Grounded explanation of score result")
     limitations:              List[str]               = Field(default_factory=list, description="Evaluation caveats")
     methodology_version:      str                     = Field("v1.0", description="Scoring methodology version")
+    scoring_method:           str                     = Field("deterministic", description="deterministic | ai_assisted | insufficient_evidence")
 
 
 class DocumentCredibilityScore(BaseModel):
@@ -63,3 +64,4 @@ class DocumentCredibilityScore(BaseModel):
     claim_scores:           List[ClaimCredibilityScore] = Field(default_factory=list, description="Per-claim scoring results")
     summary:                str                         = Field("", description="Overall document synthesis")
     methodology_version:    str                         = Field("v1.0")
+    scoring_method:         str                         = Field("deterministic", description="deterministic | ai_assisted | insufficient_evidence")

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from backend.ai.models import AIReasoningResult
 from backend.api.schemas import ClassificationLabel
 from backend.claim.models import Claim
 from backend.config.scoring_config import SCORING_METHODOLOGY_VERSION
 from backend.logging_config import logger
 from backend.retrieval.models import Evidence
+from backend.scoring.ai_cross_verifier import AICrossVerifier
 from backend.scoring.credibility_score import (
     CredibilityScoreCalculator,
     classify_credibility_score,
@@ -24,10 +26,17 @@ from backend.verification.models import (
 class CredibilityScoringService:
     """High-level service interface for computing claim and document credibility."""
 
-    def __init__(self, calculator: Optional[CredibilityScoreCalculator] = None) -> None:
-        self.calculator = calculator or CredibilityScoreCalculator()
+    def __init__(
+        self,
+        calculator: Optional[CredibilityScoreCalculator] = None,
+        cross_verifier: Optional[AICrossVerifier] = None,
+    ) -> None:
+        self.calculator      = calculator or CredibilityScoreCalculator()
+        self._cross_verifier = cross_verifier or AICrossVerifier(
+            calculator=self.calculator
+        )
 
-    def score_claim(
+    async def score_claim(
         self,
         claim_id: str,
         claim_text: str,
@@ -35,15 +44,30 @@ class CredibilityScoringService:
         source_analyses: Optional[List[SourceAnalysis]] = None,
         independence_result: Optional[ClaimIndependenceResult] = None,
         comparison_result: Optional[ClaimEvidenceComparisonResult] = None,
+        ai_reasoning: Optional[AIReasoningResult] = None,
     ) -> ClaimCredibilityScore:
-        """Calculate the explainable credibility score for a single claim."""
-        return self.calculator.calculate_claim_score(
+        """Calculate the explainable credibility score for a single claim.
+
+        1. Run the deterministic scoring engine (always the primary system).
+        2. Apply AI cross-verification (PATH A) or rescue (PATH B) when
+           AI_CROSS_VERIFY_ENABLED is True.
+        3. On any AI failure, return the deterministic result unchanged.
+        """
+        deterministic = self.calculator.calculate_claim_score(
             claim_id=claim_id,
             claim_text=claim_text,
             evidence_items=evidence_items,
             source_analyses=source_analyses,
             independence_result=independence_result,
             comparison_result=comparison_result,
+        )
+
+        return self._cross_verifier.apply(
+            deterministic_score=deterministic,
+            ai_reasoning=ai_reasoning,
+            evidence_items=evidence_items or [],
+            source_analyses=source_analyses,
+            independence_result=independence_result,
         )
 
     def score_document(
@@ -105,11 +129,20 @@ class CredibilityScoringService:
         overall_score = int(round(weighted_avg))
         overall_classification = classify_credibility_score(overall_score)
 
+        # Derive document-level scoring_method
+        methods = {cs.scoring_method for cs in claim_scores}
+        if "ai_assisted" in methods:
+            doc_scoring_method = "ai_assisted"
+        elif "insufficient_evidence" in methods and len(methods) == 1:
+            doc_scoring_method = "insufficient_evidence"
+        else:
+            doc_scoring_method = "deterministic"
+
         # Tally counts for document summary
         strongly_supp = sum(1 for cs in claim_scores if cs.classification == ClassificationLabel.STRONGLY_SUPPORTED.value)
-        mostly_supp = sum(1 for cs in claim_scores if cs.classification == ClassificationLabel.MOSTLY_SUPPORTED.value)
-        contra = sum(1 for cs in claim_scores if cs.classification == ClassificationLabel.STRONGLY_CONTRADICTED.value)
-        insufficient = sum(1 for cs in claim_scores if cs.is_insufficient_evidence)
+        mostly_supp   = sum(1 for cs in claim_scores if cs.classification == ClassificationLabel.MOSTLY_SUPPORTED.value)
+        contra        = sum(1 for cs in claim_scores if cs.classification == ClassificationLabel.STRONGLY_CONTRADICTED.value)
+        insufficient  = sum(1 for cs in claim_scores if cs.is_insufficient_evidence)
 
         summary_parts = [
             f"Document evaluated with an overall score of {overall_score}/100 ('{overall_classification}') "
@@ -130,4 +163,5 @@ class CredibilityScoringService:
             claim_scores=claim_scores,
             summary=summary,
             methodology_version=SCORING_METHODOLOGY_VERSION,
+            scoring_method=doc_scoring_method,
         )
