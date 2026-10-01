@@ -62,6 +62,9 @@ export function validateVerificationInput(
     } catch {
       return "That does not look like a valid article URL.";
     }
+    // Skip the text-length check for URL mode — a URL's character count is not
+    // a proxy for how much content the linked article contains.
+    return null;
   }
   if (trimmed.length < MIN_INPUT_LENGTH) {
     return `Add a little more detail (at least ${MIN_INPUT_LENGTH} characters) so there is something verifiable to check.`;
