@@ -478,12 +478,18 @@ export default function Analyze() {
   return (
     <div className="app-shell report-shell">
       <ReportHeader isSample={isSampleRoute} reportReady={true} />
-      <main className="report-main">
+      <main className="report-main" style={{ position: "relative", overflow: "hidden" }}>
+        <div className="ambient-glow-wrap" aria-hidden="true">
+          <span className="ambient-orb ambient-orb-1" />
+          <span className="ambient-orb ambient-orb-2" />
+        </div>
+        <div className="bg-oversized-text" aria-hidden="true">REPORT</div>
         <motion.div
           variants={staggerContainerVariants}
           initial="hidden"
           animate="visible"
           className="container report-container"
+          style={{ position: "relative", zIndex: 1 }}
         >
           <motion.div variants={sectionRevealVariants} className="report-breadcrumb">
             <span>Verification report</span>

@@ -30,7 +30,6 @@ import {
   heroFootnoteVariants,
   heroHeadingVariants,
   heroKickerVariants,
-  heroSubVariants,
   sectionRevealVariants,
   SPRING,
   staggerContainerVariants,
@@ -287,6 +286,11 @@ function ProcessSection() {
       className="process-section"
       id="process"
     >
+      <div className="ambient-glow-wrap" aria-hidden="true">
+        <span className="ambient-orb ambient-orb-1" />
+        <span className="ambient-orb ambient-orb-2" />
+      </div>
+      <div className="bg-oversized-text" aria-hidden="true">EVIDENCE</div>
       <div className="container">
         <motion.div variants={sectionRevealVariants} className="section-heading split-heading">
           <div>
@@ -297,11 +301,11 @@ function ProcessSection() {
         </motion.div>
         <div className="process-grid">
           {steps.map(([number, title, description, icon], index) => (
-            <motion.div
-              variants={cardRevealVariants}
-              whileHover={{ y: -5, transition: { duration: 0.22, ease: EASE_OUT } }}
-              className="process-step"
+            <TiltCard
               key={`process-step-${index}`}
+              variants={cardRevealVariants}
+              maxTilt={3.0}
+              className="process-step"
             >
               <div className="process-step-top">
                 <span className="step-number">{number}</span>
@@ -309,8 +313,7 @@ function ProcessSection() {
               </div>
               <h3>{title}</h3>
               <p>{description}</p>
-              {index < 3 && <span className="step-line" aria-hidden="true" />}
-            </motion.div>
+            </TiltCard>
           ))}
         </div>
       </div>
@@ -328,6 +331,7 @@ function PrinciplesSection() {
       className="principles-section"
       id="principles"
     >
+      <div className="bg-oversized-text" aria-hidden="true">PRINCIPLES</div>
       <div className="container principles-inner">
         <motion.div variants={sectionRevealVariants} className="principles-copy">
           <span className="eyebrow eyebrow-light">What we believe</span>
@@ -385,6 +389,11 @@ export default function Home() {
           animate="visible"
           className="hero-section"
         >
+          <div className="ambient-glow-wrap" aria-hidden="true">
+            <span className="ambient-orb ambient-orb-1" />
+            <span className="ambient-orb ambient-orb-2" />
+          </div>
+          <div className="bg-oversized-text" aria-hidden="true">VERIFACT</div>
           <div className="hero-grid" aria-hidden="true">
             <span /><span /><span /><span /><span /><span />
           </div>

@@ -45,15 +45,18 @@ REQUEST_HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
+    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-Site": "cross-site",
     "Sec-Fetch-User": "?1",
+    "Referer": "https://www.google.com/",
 }
 
 # Blocked hostnames or domains
@@ -516,40 +519,157 @@ def extract_article_body(soup: BeautifulSoup, json_ld_body: Optional[str] = None
     raise ArticleExtractionFailed("Could not extract readable article text from HTML document.")
 
 
+def _clean_reader_markdown(md_text: str) -> str:
+    """Strip unnecessary markdown formatting, images, and noise lines from reader output."""
+    # Remove image markdown [![...](...)](...)
+    text = re.sub(r"\[!\[.*?\]\(.*?\)\]\(.*?\)", "", md_text)
+    # Remove standalone images ![...](...)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", md_text)
+    # Remove markdown link formatting [text](url) -> text
+    text = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", text)
+    # Collapse multiple blank lines
+    lines = [line.strip() for line in text.splitlines()]
+    clean_lines = []
+    for line in lines:
+        if line:
+            clean_lines.append(line)
+        elif clean_lines and clean_lines[-1] != "":
+            clean_lines.append("")
+    return "\n\n".join(clean_lines)
+
+
+def extract_article_via_reader(
+    url: str,
+    domain: str,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+) -> Optional[NormalizedArticle]:
+    """Fallback article extraction using the public Jina Reader proxy.
+
+    Used when direct HTTP GET is blocked by CDN/WAF anti-bot measures (HTTP 403/401/429/503)
+    or returns an unparseable response on datacenter/cloud IPs.
+    """
+    reader_url = f"https://r.jina.ai/{url}"
+    headers = {
+        "Accept": "application/json",
+        "X-Target-Selector": "article",
+        "X-Timeout": str(int(timeout)),
+    }
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(reader_url, headers=headers)
+            if resp.status_code != 200:
+                headers.pop("X-Target-Selector", None)
+                resp = client.get(reader_url, headers=headers)
+                if resp.status_code != 200:
+                    return None
+
+            data = resp.json().get("data", {})
+            title = data.get("title")
+            desc = data.get("description")
+            content = data.get("content", "")
+
+            # If article selector returned insufficient text, retry without selector
+            if len(content.strip()) < 150:
+                headers.pop("X-Target-Selector", None)
+                resp = client.get(reader_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json().get("data", {})
+                    title = data.get("title") or title
+                    desc = data.get("description") or desc
+                    content = data.get("content", "")
+
+            clean_body = _clean_reader_markdown(content)
+            if len(clean_body) < 100:
+                return None
+
+            clean_domain = domain.lower().removeprefix("www.") if domain else ""
+            if clean_domain in ("ndtv.com", "bbc.com", "cnn.com"):
+                publisher = clean_domain.split(".")[0].upper()
+            elif clean_domain:
+                publisher = clean_domain.split(".")[0].capitalize()
+            else:
+                publisher = "Unknown"
+
+            return NormalizedArticle(
+                source_type="url",
+                original_input=url,
+                url=url,
+                canonical_url=data.get("url") or url,
+                title=title or "Untitled Article",
+                body=clean_body,
+                publisher=publisher,
+                author=None,
+                published_at=None,
+                domain=domain,
+                description=desc,
+                extraction_method="reader_proxy_fallback",
+                metadata={
+                    "character_count": len(clean_body),
+                    "word_count": len(clean_body.split()),
+                    "proxy": "jina_reader",
+                },
+            )
+    except Exception as exc:
+        logger.warning("Reader proxy fallback failed for '%s': %s", url, exc)
+        return None
+
+
 def extract_article_from_url(
     url: str,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     client: Optional[httpx.Client] = None,
 ) -> NormalizedArticle:
-    """End-to-end extraction from a validated URL."""
+    """End-to-end extraction from a validated URL with automatic reader fallback."""
     cleaned_url, domain = validate_url(url)
     logger.info("Starting article extraction for URL: %s", cleaned_url)
 
-    html, final_url = fetch_article_html(cleaned_url, timeout=timeout, client=client)
+    try:
+        html, final_url = fetch_article_html(cleaned_url, timeout=timeout, client=client)
+        soup = BeautifulSoup(html, "html.parser")
+        meta = extract_metadata(soup, original_url=cleaned_url, final_url=final_url)
+        body, method = extract_article_body(soup, json_ld_body=meta.get("json_ld", {}).get("articleBody"))
 
-    soup = BeautifulSoup(html, "html.parser")
-    meta = extract_metadata(soup, original_url=cleaned_url, final_url=final_url)
+        logger.info(
+            "Successfully extracted article directly: title='%s', body_len=%d, method=%s",
+            meta["title"],
+            len(body),
+            method,
+        )
 
-    body, method = extract_article_body(soup, json_ld_body=meta.get("json_ld", {}).get("articleBody"))
-
-    logger.info("Successfully extracted article: title='%s', body_len=%d, method=%s", meta["title"], len(body), method)
-
-    return NormalizedArticle(
-        source_type="url",
-        original_input=url,
-        url=final_url or cleaned_url,
-        canonical_url=meta["canonical_url"],
-        title=meta["title"],
-        body=body,
-        publisher=meta["publisher"],
-        author=meta["author"],
-        published_at=meta["published_at"],
-        domain=meta["domain"] or domain,
-        description=meta["description"],
-        extraction_method=method,
-        metadata={
-            "raw_json_ld": meta["json_ld"],
-            "character_count": len(body),
-            "word_count": len(body.split()),
-        },
-    )
+        return NormalizedArticle(
+            source_type="url",
+            original_input=url,
+            url=final_url or cleaned_url,
+            canonical_url=meta["canonical_url"],
+            title=meta["title"],
+            body=body,
+            publisher=meta["publisher"],
+            author=meta["author"],
+            published_at=meta["published_at"],
+            domain=meta["domain"] or domain,
+            description=meta["description"],
+            extraction_method=method,
+            metadata={
+                "raw_json_ld": meta["json_ld"],
+                "character_count": len(body),
+                "word_count": len(body.split()),
+            },
+        )
+    except (HTTPError, FetchFailed, FetchTimeout, ArticleExtractionFailed, EmptyContent) as direct_exc:
+        logger.warning(
+            "Direct article fetch failed (%s: %s). Attempting reader proxy fallback for %s...",
+            type(direct_exc).__name__,
+            direct_exc,
+            cleaned_url,
+        )
+        fallback_article = extract_article_via_reader(cleaned_url, domain=domain, timeout=timeout)
+        if fallback_article:
+            logger.info(
+                "Reader proxy fallback succeeded for %s: title='%s', body_len=%d",
+                cleaned_url,
+                fallback_article.title,
+                len(fallback_article.body),
+            )
+            return fallback_article
+        # If fallback also failed, re-raise original exception
+        raise direct_exc
