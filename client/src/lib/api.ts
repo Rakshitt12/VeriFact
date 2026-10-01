@@ -85,19 +85,39 @@ export class VerificationApiError extends Error {
 }
 
 function errorMessageForStatus(status: number, detail: unknown): string {
+  // FastAPI wraps HTTPException detail under a top-level "detail" key:
+  //   { "detail": { "error": "HTTP_403", "message": "..." } }  ← structured IngestionError
+  //   { "detail": "An error occurred while ingesting..." }      ← plain string 500
+  // Unwrap one level before extracting the human-readable message.
+  const fastApiDetail =
+    typeof detail === "object" && detail !== null && "detail" in detail
+      ? (detail as Record<string, unknown>).detail
+      : detail;
+
   const serverDetail =
-    typeof detail === "object" && detail !== null && "message" in detail
-      ? String((detail as { message: unknown }).message)
+    typeof fastApiDetail === "string"
+      ? fastApiDetail
+      : typeof fastApiDetail === "object" &&
+        fastApiDetail !== null &&
+        "message" in fastApiDetail
+      ? String((fastApiDetail as { message: unknown }).message)
       : null;
+
   switch (status) {
     case 400:
       return serverDetail ?? "The backend rejected that input. Check the text or URL and try again.";
+    case 403:
+      return serverDetail ?? "That URL is not accessible — it may be a blocked or private address.";
+    case 415:
+      return serverDetail ?? "That URL doesn't point to an HTML news article (PDF, image, or unsupported type).";
     case 422:
-      return "No verifiable claims could be extracted from that input. Try a more factual statement.";
+      return serverDetail ?? "No verifiable claims could be extracted. Try a more factual statement.";
+    case 502:
+      return serverDetail ?? "Could not fetch that URL. The site may be blocking requests or is temporarily unavailable.";
     case 503:
       return "Evidence retrieval is temporarily unavailable. Please try again in a moment.";
     case 504:
-      return "Verification timed out. The evidence search took too long — try again.";
+      return serverDetail ?? "Verification timed out. The evidence search took too long — try again.";
     default:
       return serverDetail ?? "Verification failed. Please try again.";
   }
