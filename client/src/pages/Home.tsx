@@ -66,8 +66,8 @@ function Header({ onStart }: { onStart: () => void }) {
       <div className="container nav-inner">
         <BrandMark />
         <nav className={`main-nav ${menuOpen ? "is-open" : ""}`} aria-label="Primary navigation">
-          <button onClick={() => scrollTo("verify")} className="nav-link nav-link-active">Verify</button>
-          <Link href="/fake-news" className="nav-link">Top Fake News</Link>
+          <Link href="/" className={`nav-link ${location === "/" ? "nav-link-active" : ""}`} onClick={() => scrollTo("verify")}>Verify</Link>
+          <Link href="/fake-news" className={`nav-link ${location === "/fake-news" ? "nav-link-active" : ""}`}>Top Fake News</Link>
           <button onClick={() => scrollTo("process")} className="nav-link">How it works</button>
           <button onClick={() => scrollTo("principles")} className="nav-link">Our principles</button>
         </nav>

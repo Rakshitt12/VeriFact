@@ -5,12 +5,12 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Bot,
-  CloudLightning,
+  CloudRain,
   ExternalLink,
   FlaskConical,
   Menu,
-  Swords,
-  User,
+  ShieldAlert,
+  UserX,
   X,
 } from "lucide-react";
 import { fakeNewsItems, type FakeNewsItem } from "@/data/fakeNews";
@@ -22,32 +22,40 @@ type Category = FakeNewsItem["category"] | "all";
 
 /* ─────────────────────── category config ───────────────────── */
 
-const CATEGORIES: { value: Category; label: string; icon: React.ReactNode }[] = [
-  { value: "all", label: "All", icon: <AlertTriangle size={14} /> },
-  { value: "conflict-misinformation", label: "Conflict", icon: <Swords size={14} /> },
-  { value: "disaster-misinformation", label: "Disaster", icon: <CloudLightning size={14} /> },
-  { value: "celebrity-hoax", label: "Celebrity", icon: <User size={14} /> },
-  { value: "scam-deepfake", label: "Deepfake", icon: <Bot size={14} /> },
-  { value: "science-myth", label: "Science", icon: <FlaskConical size={14} /> },
+const CATEGORIES: { value: Category; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
+  { value: "all", label: "All", icon: AlertTriangle },
+  { value: "conflict-misinformation", label: "Conflict", icon: ShieldAlert },
+  { value: "disaster-misinformation", label: "Disaster", icon: CloudRain },
+  { value: "celebrity-hoax", label: "Celebrity", icon: UserX },
+  { value: "scam-deepfake", label: "Deepfake", icon: Bot },
+  { value: "science-myth", label: "Science", icon: FlaskConical },
 ];
 
-const CATEGORY_LABELS: Record<FakeNewsItem["category"], string> = {
-  "conflict-misinformation": "Conflict",
-  "disaster-misinformation": "Disaster",
-  "celebrity-hoax": "Celebrity Hoax",
-  "scam-deepfake": "Deepfake Scam",
-  "science-myth": "Science Myth",
+const CATEGORY_META: Record<
+  FakeNewsItem["category"],
+  { label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
+> = {
+  "conflict-misinformation": {
+    label: "Conflict Misinformation",
+    icon: ShieldAlert,
+  },
+  "disaster-misinformation": {
+    label: "Disaster Misinformation",
+    icon: CloudRain,
+  },
+  "celebrity-hoax": {
+    label: "Celebrity Hoax",
+    icon: UserX,
+  },
+  "scam-deepfake": {
+    label: "AI Deepfake Scam",
+    icon: Bot,
+  },
+  "science-myth": {
+    label: "Science Myth",
+    icon: FlaskConical,
+  },
 };
-
-function getCategoryIcon(category: FakeNewsItem["category"]) {
-  switch (category) {
-    case "conflict-misinformation": return <Swords size={13} />;
-    case "disaster-misinformation": return <CloudLightning size={13} />;
-    case "celebrity-hoax": return <User size={13} />;
-    case "scam-deepfake": return <Bot size={13} />;
-    case "science-myth": return <FlaskConical size={13} />;
-  }
-}
 
 function formatDate(raw: string) {
   if (raw === "evergreen") return "Evergreen";
@@ -105,44 +113,45 @@ function Header() {
 /* ─────────────────────── card ───────────────────────────────── */
 
 function FakeNewsCard({ item }: { item: FakeNewsItem }) {
+  const meta = CATEGORY_META[item.category];
+  const IconComponent = meta.icon;
+
   return (
     <motion.a
       variants={cardRevealVariants}
       href={item.sourceUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="fact-check-card process-step interactive-card"
-      style={{ textDecoration: "none", display: "block" }}
+      className="process-step interactive-card fact-check-card"
+      style={{ textDecoration: "none", display: "flex", flexDirection: "column" }}
       aria-label={`Read debunk: ${item.claim}`}
     >
-      {/* category badge */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+      {/* card top with dedicated icon & status */}
+      <div className="process-step-top" style={{ marginBottom: "18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div className="step-icon" aria-hidden="true">
+            <IconComponent size={19} />
+          </div>
+          <span
+            className="status-badge"
+            style={{
+              background: "var(--accent)",
+              color: "var(--accent-foreground)",
+              padding: "5px 10px",
+              borderRadius: "99px",
+              fontSize: "10px",
+              fontWeight: 800,
+              textTransform: "uppercase",
+              letterSpacing: ".05em",
+            }}
+          >
+            {meta.label}
+          </span>
+        </div>
         <span
-          className="status-badge"
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "5px",
-            background: "var(--accent)",
-            color: "var(--accent-foreground)",
-            borderRadius: "99px",
-            padding: "5px 9px",
-            fontSize: "10px",
-            fontWeight: 800,
-            textTransform: "uppercase",
-            letterSpacing: ".05em",
-          }}
-        >
-          {getCategoryIcon(item.category)}
-          {CATEGORY_LABELS[item.category]}
-        </span>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "5px",
             color: "var(--primary)",
-            fontSize: "10px",
+            fontSize: "11px",
             fontWeight: 800,
             textTransform: "uppercase",
             letterSpacing: ".06em",
@@ -153,20 +162,19 @@ function FakeNewsCard({ item }: { item: FakeNewsItem }) {
       </div>
 
       {/* claim */}
-      <p
-        className="fact-check-value"
+      <h3
         style={{
           fontFamily: "'Space Grotesk', sans-serif",
-          fontSize: "17px",
-          fontWeight: 570,
+          fontSize: "18px",
+          fontWeight: 600,
           letterSpacing: "-.035em",
-          lineHeight: 1.2,
-          marginBottom: "10px",
+          lineHeight: 1.3,
+          margin: "0 0 10px",
           color: "var(--card-foreground)",
         }}
       >
         "{item.claim}"
-      </p>
+      </h3>
 
       {/* excerpt */}
       <p
@@ -174,7 +182,8 @@ function FakeNewsCard({ item }: { item: FakeNewsItem }) {
           color: "var(--muted-foreground)",
           fontSize: "13px",
           lineHeight: 1.6,
-          margin: "0 0 16px",
+          margin: "0 0 20px",
+          flex: 1,
         }}
       >
         {item.excerpt}
@@ -187,8 +196,9 @@ function FakeNewsCard({ item }: { item: FakeNewsItem }) {
           alignItems: "center",
           justifyContent: "space-between",
           borderTop: "1px solid var(--border)",
-          paddingTop: "12px",
+          paddingTop: "14px",
           gap: "10px",
+          marginTop: "auto",
         }}
       >
         <span
@@ -207,7 +217,7 @@ function FakeNewsCard({ item }: { item: FakeNewsItem }) {
         <span
           style={{
             color: "var(--muted-foreground)",
-            fontSize: "10px",
+            fontSize: "11px",
             letterSpacing: ".02em",
           }}
         >
@@ -220,7 +230,7 @@ function FakeNewsCard({ item }: { item: FakeNewsItem }) {
         className="card-link-icon"
         style={{
           position: "absolute",
-          top: "22px",
+          top: "24px",
           right: "22px",
           color: "var(--muted-foreground)",
         }}
@@ -255,7 +265,7 @@ function CategoryTabs({
         paddingBottom: "0",
       }}
     >
-      {CATEGORIES.map(({ value, label, icon }) => {
+      {CATEGORIES.map(({ value, label, icon: TabIcon }) => {
         const isActive = active === value;
         return (
           <button
@@ -266,7 +276,7 @@ function CategoryTabs({
             onClick={() => onChange(value)}
             style={{ position: "relative" }}
           >
-            {icon}
+            <TabIcon size={14} />
             <span>{label}</span>
             {isActive && (
               <motion.span
